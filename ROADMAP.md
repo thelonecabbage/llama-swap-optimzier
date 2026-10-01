@@ -30,12 +30,41 @@ justifies the work. Keep entries specific enough to act on; vague entries
   acceptance rate or speculative-decoding overhead. Add instrumentation when
   the server exposes these fields, and a case that compares a draft model or
   ngram speculation against baseline.
-- **Vision and embedding workloads.** `benchmark_cases.json` is text-chat
-  only; there is no coverage for multimodal or embedding-specific
-  correctness/latency. Add separate case sets rather than inferring coverage
-  from chat TPS.
+- **Vision and embedding workloads.** `benchmark_cases.json` now includes
+  synthetic and real-asset vision/audio cases (VQA, document QA, image
+  sequences, tone counting, transcription) plus a capability-detection layer
+  that skips cases a model can't accept. Embedding-specific correctness/
+  latency (`/v1/embeddings`) is still uncovered — add a dedicated embedding
+  case set (retrieval accuracy on a small fixed corpus, embedding latency vs.
+  input length) rather than inferring it from chat TPS.
 
-## Tooling and reporting
+## Uncovered task types (architecture-limited)
+
+llama-swap/llama.cpp exposes an OpenAI-compatible chat/completions and
+embeddings endpoint. The following HuggingFace pipeline-tag families cannot
+be exercised through that interface at all, regardless of case design, so
+they stay out of scope unless the harness grows support for a different
+serving backend (e.g. diffusers, a TTS server, a tabular/RL runtime):
+
+- **Image/video/3D generation.** text-to-image, image-to-image,
+  image-to-video, text-to-video, text-to-3d, image-to-3d, unconditional
+  image generation.
+- **Dense vision perception.** object detection, zero-shot object detection,
+  image segmentation, depth estimation, keypoint detection, mask generation.
+- **Audio generation.** text-to-speech, text-to-audio, voice activity
+  detection — llama.cpp can consume audio input but has no audio output path.
+- **Structured/tabular data.** tabular classification, tabular regression,
+  time-series forecasting.
+- **Reinforcement learning.** RL and robotics pipeline tags assume a
+  simulator/environment loop with no chat-completions equivalent.
+- **Graph machine learning.** graph classification/regression and related
+  tags operate on graph-structured inputs, not token sequences.
+- **Any-to-any / multimodal generation.** tags that produce new
+  image/audio/video outputs from mixed inputs (as opposed to describing or
+  answering questions about them, which the existing vision/audio cases
+  already cover).
+
+
 
 - **Structured comparison report.** Today, comparing `CONFIG_ID` runs means
   manually reading `benchmark_summary.csv` and `benchmark_results.jsonl`. Add
