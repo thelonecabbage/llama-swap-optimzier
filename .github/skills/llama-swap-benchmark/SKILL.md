@@ -22,11 +22,16 @@ scripts, dependency-free (standard library only), Python 3.10+.
 | `benchmark_llama_swap.py` | Runs chat-completion benchmark cases against one or more models at a given endpoint. Lowest-level script. |
 | `benchmark_all_models.py` | Orchestrates suites across models in SWAP mode (existing llama-swap endpoint) or DIRECT mode (starts llama-server in a Docker container itself). |
 | `run_benchmark_tests.py` | Runs `benchmark_all_models.py` once per `[test NAME]` block in a literal KEY=value test-plan file (e.g. `examples/swap-smoke.conf`). |
-| `benchmark_cases.json` | Stable prompt/workload definitions shared by all scripts. |
+| `benchmark_cases.json` | Stable prompt/workload definitions shared by all scripts. Each case declares `task` and `modalities`; most are text-only, a handful exercise image/audio input. |
+| `synthetic_media.py` | Dependency-free, deterministic PNG/WAV generation for synthetic multimodal cases and capability probes. No third-party image/audio libraries. |
+| `model_capabilities.py` | Resolves which input modalities (text/image/audio) a model accepts: declared config first, then a local cache, then a live content-agnostic probe. |
+| `fetch_assets.py` | Manual, one-time script that downloads a few pinned, checksum-verified, CC-BY-NC-SA-4.0 real sample assets (photo, scanned document, speech clip) into gitignored `assets/`, for the `real_*` benchmark cases. Never run automatically. |
 | `config_env.py` | Loads `.defaults` → `.env` → process environment, in that precedence order. |
 | `.defaults` | Checked into git. Generic tuning defaults shared by every environment (run counts, timeouts, llama-server flags like CTX_SIZE/THREADS/BATCH_SIZE). |
-| `.env` | Gitignored. Environment-specific config only: endpoint URL, API key, model selection/paths, DIRECT container name/host/port. |
+| `.env` | Gitignored. Environment-specific config only: endpoint URL, API key, model selection/paths, DIRECT container name/host/port, optional `MODEL_CAPABILITIES_JSON`/asset path overrides. |
 | `.env.example` | Template for `.env`; copy with `cp .env.example .env`. |
+| `assets/` | Gitignored. Populated by `fetch_assets.py`; holds the real image/audio files used by `real_*` cases. |
+| `ROADMAP.md` | Backlog, including a list of HuggingFace pipeline-tag families that are architecture-limited and permanently out of scope for this OpenAI-compatible-endpoint harness. |
 
 ## Configuration precedence
 
@@ -47,6 +52,18 @@ work as fallbacks for backward compatibility — prefer `MODELS` in new config.
 
 `MODEL_DEFAULTS_JSON` is a JSON map of model ID → launch settings
 (`MODEL_PATH`, `GPU_LAYERS`, `MMPROJ`, etc.), not a selection list.
+
+## Modality/capability detection
+
+`benchmark_llama_swap.py` skips a case against a model (writing a JSONL skip
+record, not a failure) unless the model's detected capabilities cover the
+case's `modalities`. Detection order: `MODEL_CAPABILITIES_JSON` (explicit,
+per-model) → `MMPROJ`/`MODALITIES` inference from `MODEL_DEFAULTS_JSON` →
+`model_capabilities_cache.json` (gitignored) → a live probe against the real
+endpoint using a tiny synthetic image/audio payload from `synthetic_media.py`,
+judged only by HTTP status, never response content. Pass
+`--skip-capability-check` to force every case to run regardless; pass
+`--refresh-capabilities` to ignore the cache and re-probe.
 
 ## Optimization context
 
@@ -190,6 +207,9 @@ to contact the server. Do not silently switch to DIRECT mode.
   them out of logs, test-plan files, and commit history.
 - Prefer `run_benchmark_tests.py --dry-run <plan>` to preview a run without
   contacting any server.
+- `fetch_assets.py` is the only script that contacts a third-party host
+  (huggingface.co); run it only when explicitly asked, never as part of a
+  routine benchmark or test cycle.
 
 ## Common commands
 
@@ -207,6 +227,11 @@ python3 run_benchmark_tests.py --dry-run examples/swap-smoke.conf
 
 # Live SWAP-mode smoke run (only if explicitly requested)
 python3 run_benchmark_tests.py examples/swap-smoke.conf
+
+# List/fetch the real assets used by real_image_vqa/real_document_qa/real_audio_transcribe
+# (one-time, explicit, contacts huggingface.co — never run as part of a routine check)
+python3 fetch_assets.py --list
+python3 fetch_assets.py
 ```
 
 ## Test-plan file format (`examples/*.conf`)
@@ -234,3 +259,13 @@ with those KEY=value pairs as its environment. Keys containing `KEY`, `TOKEN`,
 - After any change to `benchmark_llama_swap.py`, `benchmark_all_models.py`, or
   `run_benchmark_tests.py`, re-run the three `--help` invocations above plus
   the dry-run smoke check before claiming the change works.
+- Test files mirror the source modules: `tests/test_benchmark_llama_swap.py`,
+  `tests/test_benchmark_all_models.py`, `tests/test_benchmark_cases.py`,
+  `tests/test_config_env.py`, `tests/test_run_benchmark_tests.py`,
+  `tests/test_synthetic_media.py`, `tests/test_model_capabilities.py`,
+  `tests/test_fetch_assets.py`. Network-touching code (`fetch_assets.py`,
+  live probes in `model_capabilities.py`) is tested with mocked
+  `urllib.request.urlopen`/injected callables, never real network calls.
+- New benchmark case generator types go in `materialize_case()` in
+  `benchmark_llama_swap.py`; new validator kinds go in `auto_score()`. Add a
+  `task`/`modalities` pair to any new `benchmark_cases.json` entry.
