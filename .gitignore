@@ -1,0 +1,10 @@
+.venv/
+venv/
+.env
+__pycache__/
+*.py[cod]
+.pytest_cache/
+benchmark_results.jsonl
+benchmark_summary.csv
+benchmark-logs/
+benchmark-wrapper-logs/

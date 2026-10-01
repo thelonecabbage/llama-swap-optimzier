@@ -1,0 +1,33 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Benchmark: show sweep help",
+			"type": "process",
+			"command": "${command:python.interpreterPath}",
+			"args": [
+				"benchmark_all_models.py",
+				"--help"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "Tests: unit",
+			"type": "shell",
+			"command": "${command:python.interpreterPath} -m unittest discover -v",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Benchmark: dry-run SWAP smoke",
+			"type": "shell",
+			"command": "${command:python.interpreterPath} run_benchmark_tests.py --dry-run examples/swap-smoke.conf",
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}

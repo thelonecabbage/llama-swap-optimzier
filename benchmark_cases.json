@@ -1,0 +1,113 @@
+[
+  {
+    "id": "quick_chat",
+    "description": "Short deterministic readiness response.",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Follow the user's formatting instruction exactly."
+      },
+      {
+        "role": "user",
+        "content": "Reply with exactly this text and nothing else: LLAMA-SWAP-READY"
+      }
+    ],
+    "temperature": 0.0,
+    "max_tokens": 16,
+    "validator": {
+      "type": "exact",
+      "text": "LLAMA-SWAP-READY"
+    }
+  },
+  {
+    "id": "it_troubleshooting",
+    "description": "Safe first-line Linux disk-space troubleshooting.",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Give concise, safe troubleshooting steps. Do not recommend destructive actions without diagnosis and confirmation."
+      },
+      {
+        "role": "user",
+        "content": "A Linux server reports that a filesystem is nearly full. Give one read-only command to inspect filesystem usage and briefly explain what it shows. Do not delete or modify anything."
+      }
+    ],
+    "temperature": 0.0,
+    "max_tokens": 128,
+    "validator": {
+      "type": "contains",
+      "text": "df -h"
+    }
+  },
+  {
+    "id": "coding_bug",
+    "description": "Diagnose and fix an off-by-one error while pairing adjacent items.",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Explain the bug briefly, then provide the smallest correct code change."
+      },
+      {
+        "role": "user",
+        "content": "This loop raises IndexError on its final iteration. It should append each adjacent pair from items. Show the corrected loop and explain the boundary.\n\nfor index in range(len(items)):\n    pairs.append((items[index], items[index + 1]))"
+      }
+    ],
+    "temperature": 0.0,
+    "max_tokens": 192,
+    "validator": {
+      "type": "contains",
+      "text": "len(items) - 1"
+    }
+  },
+  {
+    "id": "rag_grounding",
+    "description": "Retrieve a unique value from a generated context and avoid guessing.",
+    "generator": {
+      "type": "needle_haystack",
+      "needle": "ORCHID-42",
+      "approx_tokens": 2048,
+      "seed": 17,
+      "question": "Return only the authoritative access_code from the records."
+    },
+    "temperature": 0.0,
+    "max_tokens": 16,
+    "validator": {
+      "type": "exact",
+      "text": "ORCHID-42"
+    }
+  },
+  {
+    "id": "long_context_8k",
+    "description": "Retrieve a unique value from an approximately 8K-token generated context.",
+    "generator": {
+      "type": "needle_haystack",
+      "needle": "ORCHID-8K-731",
+      "approx_tokens": 8192,
+      "seed": 81,
+      "question": "Return only the authoritative access_code from the records."
+    },
+    "temperature": 0.0,
+    "max_tokens": 16,
+    "validator": {
+      "type": "exact",
+      "text": "ORCHID-8K-731"
+    }
+  },
+  {
+    "id": "long_context_24k",
+    "description": "Retrieve a unique value from an approximately 24K-token generated context.",
+    "generator": {
+      "type": "needle_haystack",
+      "needle": "ORCHID-24K-914",
+      "approx_tokens": 24576,
+      "seed": 241,
+      "question": "Return only the authoritative access_code from the records."
+    },
+    "temperature": 0.0,
+    "max_tokens": 16,
+    "validator": {
+      "type": "exact",
+      "text": "ORCHID-24K-914"
+    }
+  }
+]
