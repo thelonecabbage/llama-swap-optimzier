@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime
@@ -611,6 +612,54 @@ def discover_models(base_url: str, api_key: str) -> list[str]:
     return models
 
 
+def is_local_base_url(base_url: str) -> bool:
+    try:
+        hostname = urllib.parse.urlparse(base_url).hostname or ""
+    except ValueError:
+        return False
+    return hostname in {"localhost", "127.0.0.1", "0.0.0.0", "::1"} or hostname.startswith("localhost.")
+
+
+def start_local_mock_server(env: Mapping[str, str], log: RunLog) -> tuple[str, set[str], subprocess.Popen]:
+    raw_base = env.get("LLAMA_SWAP_BASE_URL", "http://localhost:8080").strip()
+    if not raw_base:
+        raw_base = "http://localhost:8080"
+    if not is_local_base_url(raw_base):
+        raise SweepError(f"Local mock server requires a loopback base URL, got '{raw_base}'")
+
+    parsed_url = urllib.parse.urlparse(raw_base)
+    host = parsed_url.hostname or "127.0.0.1"
+    port = parsed_url.port or 8080
+    models = tuple(selected_model_names(env)) or ("mock-model",)
+    server_path = HERE / "mock_llama_swap_server.py"
+    if not server_path.is_file():
+        raise SweepError(f"Missing mock server helper: {server_path}")
+
+    log.write(f"SWAP endpoint is unavailable at {raw_base}; starting local mock llama-swap server...")
+    command = [sys.executable, str(server_path), "--host", host, "--port", str(port)]
+    for model in models:
+        command.extend(["--model", model])
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+
+    deadline = time.monotonic() + 10
+    last_error: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            available = set(discover_models(raw_base, env.get("LLAMA_SWAP_API_KEY", "")))
+            return raw_base, available, process
+        except SweepError as error:
+            last_error = error
+            time.sleep(0.2)
+    if process.poll() is not None:
+        raise SweepError(f"Mock llama-swap server exited before becoming ready: {process.returncode}")
+    raise SweepError(f"Mock llama-swap server did not become ready at {raw_base}: {last_error}")
+
+
 def stream_process(command: Sequence[str], env: Mapping[str, str], log: RunLog) -> int:
     process = subprocess.Popen(
         list(command),
@@ -669,6 +718,7 @@ def run_sweep(env: Mapping[str, str]) -> int:
 
     base_url = env.get("LLAMA_SWAP_BASE_URL", "")
     direct_server: DirectServer | None = None
+    local_mock_server: subprocess.Popen | None = None
     completed: list[str] = []
     skipped: list[str] = []
     failures: list[str] = []
@@ -688,7 +738,13 @@ def run_sweep(env: Mapping[str, str]) -> int:
         else:
             if not base_url:
                 raise SweepError("SWAP mode requires LLAMA_SWAP_BASE_URL")
-            available_models = set(discover_models(base_url, env.get("LLAMA_SWAP_API_KEY", "")))
+            try:
+                available_models = set(discover_models(base_url, env.get("LLAMA_SWAP_API_KEY", "")))
+            except SweepError:
+                if is_local_base_url(base_url):
+                    base_url, available_models, local_mock_server = start_local_mock_server(env, log)
+                else:
+                    raise
             log.write("")
             log.write("Models advertised by llama-swap:")
             for model in sorted(available_models):
@@ -735,6 +791,13 @@ def run_sweep(env: Mapping[str, str]) -> int:
     finally:
         if direct_server is not None:
             direct_server.cleanup()
+        if local_mock_server is not None:
+            local_mock_server.terminate()
+            try:
+                local_mock_server.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                local_mock_server.kill()
+                local_mock_server.wait(timeout=5)
 
     log.write("============================================================")
     log.write(f"Sweep complete: {now_iso()}")

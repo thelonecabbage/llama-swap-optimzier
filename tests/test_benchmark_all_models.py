@@ -207,6 +207,43 @@ class SweepExecutionTests(unittest.TestCase):
             self.assertIn("long_context_8k", long_command)
             self.assertTrue(log_dir.is_dir())
 
+    def test_swap_sweep_uses_local_mock_server_when_endpoint_is_unreachable(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            bench = directory / "benchmark.py"
+            cases = directory / "cases.json"
+            bench.touch()
+            cases.touch()
+            log_dir = directory / "logs"
+
+            with (
+                mock.patch.object(sweep, "BENCH", bench),
+                mock.patch.object(sweep, "CASES", cases),
+                mock.patch.object(sweep, "RESULTS", directory / "results.jsonl"),
+                mock.patch.object(sweep, "SUMMARY", directory / "summary.csv"),
+                mock.patch.object(sweep, "LOG_DIR", log_dir),
+                mock.patch.object(sweep.shutil, "which", return_value="/usr/bin/python3"),
+                mock.patch.object(sweep, "discover_models", side_effect=sweep.SweepError("connect failed")),
+                mock.patch.object(
+                    sweep,
+                    "start_local_mock_server",
+                    return_value=("http://127.0.0.1:8080", {"text-model"}, mock.Mock()),
+                ) as fallback,
+                mock.patch.object(sweep, "stream_process", return_value=0) as run_process,
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                result = sweep.run_sweep({
+                    "MODEL": "text-model",
+                    "LLAMA_SWAP_BASE_URL": "http://localhost:8080",
+                    "WARMUPS": "0",
+                })
+
+            self.assertEqual(result, 0)
+            fallback.assert_called_once()
+            self.assertEqual(run_process.call_count, 2)
+            self.assertIn("quick_chat", run_process.call_args_list[0].args[0])
+            self.assertIn("long_context_8k", run_process.call_args_list[1].args[0])
+
     def test_direct_sweep_requires_model_before_docker_actions(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             directory = Path(temporary_directory)

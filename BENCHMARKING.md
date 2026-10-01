@@ -6,10 +6,16 @@ Before each experiment:
 
 ```bash
 date
-sha256sum "$LLAMA_SWAP_CONFIG_FILE"
 docker ps --filter "name=$DIRECT_CONTAINER"
 docker inspect "$DIRECT_CONTAINER" --format '{{.Config.Image}}'
 free -h
+```
+
+Hash the active YAML on the machine where it lives. For the daneel deployment,
+`LLAMA_SWAP_CONFIG_FILE` is an SFTP URI, not a local path:
+
+```bash
+ssh daneel.local sha256sum /opt/daneel/llama-swap.yaml
 ```
 
 If practical, save the YAML hash in the `--notes` field.

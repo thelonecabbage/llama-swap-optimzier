@@ -10,3 +10,5 @@ benchmark-logs/
 benchmark-wrapper-logs/
 assets/
 model_capabilities_cache.json
+llama-swap.yaml
+*-validation.conf
