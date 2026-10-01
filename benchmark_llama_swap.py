@@ -36,9 +36,11 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import base64
 import csv
 import hashlib
 import json
+import mimetypes
 import platform
 import re
 import statistics
@@ -48,8 +50,10 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 
+import model_capabilities
+import synthetic_media
 from config_env import EnvConfigError, load_environment
 
 
@@ -173,13 +177,47 @@ def make_needle_context(approx_tokens: int, needle: str, seed: int = 17) -> str:
     return "".join(lines)
 
 
-def materialize_case(case: Dict[str, Any]) -> Dict[str, Any]:
+def required_modalities(case: Dict[str, Any]) -> Set[str]:
+    mods = case.get("modalities") or ["text"]
+    return {str(m) for m in mods}
+
+
+def case_supported_by_capabilities(case: Dict[str, Any], capabilities: Set[str]) -> bool:
+    return required_modalities(case).issubset(capabilities)
+
+
+def _image_content_part(png_bytes: bytes) -> Dict[str, Any]:
+    data_uri = "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii")
+    return {"type": "image_url", "image_url": {"url": data_uri}}
+
+
+def _audio_content_part(wav_bytes: bytes, fmt: str = "wav") -> Dict[str, Any]:
+    data = base64.b64encode(wav_bytes).decode("ascii")
+    return {"type": "input_audio", "input_audio": {"data": data, "format": fmt}}
+
+
+def _resolve_asset_path(gen: Dict[str, Any], environment: Optional[Mapping[str, str]]) -> Optional[Path]:
+    env = environment or {}
+    path_env = gen.get("path_env")
+    override = env.get(path_env) if path_env else None
+    raw_path = override or gen.get("default_path")
+    if not raw_path:
+        return None
+    path = Path(raw_path)
+    if not path.is_absolute():
+        path = Path(__file__).parent / raw_path
+    return path if path.is_file() else None
+
+
+def materialize_case(case: Dict[str, Any], environment: Optional[Mapping[str, str]] = None) -> Dict[str, Any]:
     case = json.loads(json.dumps(case))  # deep copy without external deps
     gen = case.get("generator")
-    if gen:
-        gtype = gen.get("type")
-        if gtype != "needle_haystack":
-            raise ValueError(f"Unsupported generator type: {gtype}")
+    if not gen:
+        return case
+
+    gtype = gen.get("type")
+
+    if gtype == "needle_haystack":
         needle = str(gen["needle"])
         approx_tokens = int(gen["approx_tokens"])
         context = make_needle_context(approx_tokens, needle, int(gen.get("seed", 17)))
@@ -194,7 +232,81 @@ def materialize_case(case: Dict[str, Any]) -> Dict[str, Any]:
             },
             {"role": "user", "content": context + "\n\nQUESTION:\n" + question},
         ]
-    return case
+        return case
+
+    if gtype == "synthetic_image_grid":
+        png_bytes = synthetic_media.grid_image_png(
+            grid_size=int(gen.get("grid_size", 4)),
+            cell_px=int(gen.get("cell_px", 24)),
+            highlight_row=int(gen["highlight_row"]),
+            highlight_col=int(gen["highlight_col"]),
+        )
+        question = gen["question"]
+        case["messages"] = [
+            {
+                "role": "system",
+                "content": "Answer only using the image provided. Follow the reply format exactly.",
+            },
+            {"role": "user", "content": [{"type": "text", "text": question}, _image_content_part(png_bytes)]},
+        ]
+        return case
+
+    if gtype == "synthetic_image_sequence":
+        frame_positions = [tuple(pos) for pos in gen["frame_positions"]]
+        frames = synthetic_media.image_sequence_pngs(
+            grid_size=int(gen.get("grid_size", 4)),
+            cell_px=int(gen.get("cell_px", 24)),
+            frame_positions=frame_positions,
+        )
+        question = gen["question"]
+        content: List[Dict[str, Any]] = [{"type": "text", "text": question}]
+        for index, frame_png in enumerate(frames, start=1):
+            content.append({"type": "text", "text": f"Frame {index}:"})
+            content.append(_image_content_part(frame_png))
+        case["messages"] = [
+            {
+                "role": "system",
+                "content": "These images are ordered frames from a short video. Answer only using them.",
+            },
+            {"role": "user", "content": content},
+        ]
+        return case
+
+    if gtype == "synthetic_audio_tones":
+        wav_bytes = synthetic_media.tone_sequence_wav(tone_count=int(gen["tone_count"]))
+        question = gen["question"]
+        case["messages"] = [
+            {
+                "role": "system",
+                "content": "Answer only using the audio provided. Follow the reply format exactly.",
+            },
+            {"role": "user", "content": [{"type": "text", "text": question}, _audio_content_part(wav_bytes)]},
+        ]
+        return case
+
+    if gtype in ("local_asset_image", "local_asset_audio"):
+        asset_path = _resolve_asset_path(gen, environment)
+        if asset_path is None:
+            case["_asset_missing"] = True
+            return case
+        data = asset_path.read_bytes()
+        question = gen["question"]
+        if gtype == "local_asset_image":
+            mime = mimetypes.guess_type(asset_path.name)[0] or "image/jpeg"
+            part = {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"}}
+        else:
+            fmt = asset_path.suffix.lstrip(".") or "wav"
+            part = _audio_content_part(data, fmt=fmt)
+        case["messages"] = [
+            {
+                "role": "system",
+                "content": "Answer only using the attached file's content. Do not invent details.",
+            },
+            {"role": "user", "content": [{"type": "text", "text": question}, part]},
+        ]
+        return case
+
+    raise ValueError(f"Unsupported generator type: {gtype}")
 
 
 def response_text_from_chunk(chunk: Dict[str, Any]) -> str:
@@ -355,6 +467,10 @@ def auto_score(case: Dict[str, Any], text: str) -> Optional[float]:
         needles = [str(x).lower() for x in validator.get("texts", [])]
         lowered = text.lower()
         return 1.0 if all(n in lowered for n in needles) else 0.0
+    if kind == "contains_any":
+        needles = [str(x).lower() for x in validator.get("texts", [])]
+        lowered = text.lower()
+        return 1.0 if any(n in lowered for n in needles) else 0.0
     return None
 
 
@@ -471,6 +587,17 @@ def make_parser(environment: Dict[str, str]) -> argparse.ArgumentParser:
     p.add_argument("--notes", default=environment.get("BENCHMARK_NOTES", ""), help="Free-form experiment note stored in each result row.")
     p.add_argument("--save-responses", action="store_true", help="Store full model responses in results JSONL.")
     p.add_argument("--skip-model-check", action="store_true")
+    p.add_argument(
+        "--skip-capability-check",
+        action="store_true",
+        help="Run every selected case regardless of declared/probed model modality support.",
+    )
+    p.add_argument("--refresh-capabilities", action="store_true", help="Ignore the capability cache and re-probe.")
+    p.add_argument(
+        "--capabilities-cache",
+        type=Path,
+        default=Path(environment.get("MODEL_CAPABILITIES_CACHE", model_capabilities.DEFAULT_CACHE_PATH)),
+    )
     return p
 
 
@@ -499,13 +626,28 @@ def main() -> int:
     if args.runs < 1 or args.warmups < 0:
         p.error("--runs must be >=1 and --warmups must be >=0")
 
-    cases = [materialize_case(c) for c in load_cases(args.cases_file)]
+    cases = [materialize_case(c, environment) for c in load_cases(args.cases_file)]
     if args.case_names:
         wanted = set(args.case_names)
         cases = [c for c in cases if c.get("id") in wanted]
         missing = wanted - {c.get("id") for c in cases}
         if missing:
             raise SystemExit(f"Unknown benchmark case(s): {', '.join(sorted(missing))}")
+
+    if not cases:
+        raise SystemExit("No benchmark cases selected.")
+
+    runnable_cases = []
+    for case in cases:
+        if case.get("_asset_missing"):
+            print(
+                f"SKIP case '{case['id']}': required local asset not found. Run fetch_assets.py or set the "
+                f"case's asset path override.",
+                file=sys.stderr,
+            )
+            continue
+        runnable_cases.append(case)
+    cases = runnable_cases
 
     if not cases:
         raise SystemExit("No benchmark cases selected.")
@@ -521,6 +663,26 @@ def main() -> int:
 
     host = host_metadata()
 
+    capabilities_by_model: Dict[str, Set[str]] = {}
+    if args.skip_capability_check:
+        for model in args.model:
+            capabilities_by_model[model] = set(model_capabilities.ALL_MODALITIES)
+    else:
+        def post_chat(payload: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
+            return http_json(f"{args.base_url}/v1/chat/completions", "POST", payload, args.api_key, args.timeout)
+
+        for model in args.model:
+            detected = model_capabilities.detect_capabilities(
+                model=model,
+                base_url=args.base_url,
+                environment=environment,
+                post_chat=post_chat,
+                cache_path=args.capabilities_cache,
+                use_cache=not args.refresh_capabilities,
+            )
+            capabilities_by_model[model] = set(detected["modalities"])
+            print(f"Capabilities [{model}]: {sorted(capabilities_by_model[model])} (source={detected['source']})")
+
     print(f"Endpoint: {args.base_url}")
     print(f"Cases: {', '.join(c['id'] for c in cases)}")
     print(f"Models: {', '.join(args.model)}")
@@ -529,6 +691,21 @@ def main() -> int:
 
     for model in args.model:
         for case in cases:
+            if not args.skip_capability_check and not case_supported_by_capabilities(case, capabilities_by_model[model]):
+                missing = required_modalities(case) - capabilities_by_model[model]
+                print(f"SKIP [{model}] [{case['id']}]: missing modality support: {', '.join(sorted(missing))}")
+                append_jsonl(
+                    args.results,
+                    {
+                        "ts": now_iso(),
+                        "model": model,
+                        "case_id": case["id"],
+                        "ok": None,
+                        "skipped": True,
+                        "skip_reason": f"missing_modality:{','.join(sorted(missing))}",
+                    },
+                )
+                continue
             total_iterations = args.warmups + args.runs
             for idx in range(total_iterations):
                 warmup = idx < args.warmups

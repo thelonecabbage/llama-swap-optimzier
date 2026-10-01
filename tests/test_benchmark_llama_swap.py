@@ -101,6 +101,105 @@ class CaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unsupported generator type"):
             benchmark.materialize_case({"generator": {"type": "unknown"}})
 
+    def test_materialize_synthetic_image_grid_builds_image_content_part(self):
+        case = {
+            "id": "vqa",
+            "generator": {
+                "type": "synthetic_image_grid",
+                "grid_size": 2,
+                "cell_px": 4,
+                "highlight_row": 0,
+                "highlight_col": 1,
+                "question": "where?",
+            },
+        }
+        materialized = benchmark.materialize_case(case)
+        content = materialized["messages"][1]["content"]
+        self.assertEqual(content[0], {"type": "text", "text": "where?"})
+        self.assertEqual(content[1]["type"], "image_url")
+        self.assertTrue(content[1]["image_url"]["url"].startswith("data:image/png;base64,"))
+
+    def test_materialize_synthetic_image_sequence_builds_one_part_per_frame(self):
+        case = {
+            "id": "seq",
+            "generator": {
+                "type": "synthetic_image_sequence",
+                "grid_size": 2,
+                "cell_px": 4,
+                "frame_positions": [[0, 0], [1, 1]],
+                "question": "track it",
+            },
+        }
+        materialized = benchmark.materialize_case(case)
+        content = materialized["messages"][1]["content"]
+        image_parts = [c for c in content if c.get("type") == "image_url"]
+        self.assertEqual(len(image_parts), 2)
+
+    def test_materialize_synthetic_audio_tones_builds_audio_content_part(self):
+        case = {
+            "id": "tones",
+            "generator": {"type": "synthetic_audio_tones", "tone_count": 2, "question": "how many?"},
+        }
+        materialized = benchmark.materialize_case(case)
+        content = materialized["messages"][1]["content"]
+        self.assertEqual(content[1]["type"], "input_audio")
+        self.assertEqual(content[1]["input_audio"]["format"], "wav")
+
+    def test_materialize_local_asset_image_marks_case_missing_when_file_absent(self):
+        case = {
+            "id": "real_vqa",
+            "generator": {
+                "type": "local_asset_image",
+                "default_path": "assets/does-not-exist.jpg",
+                "question": "what is it?",
+            },
+        }
+        materialized = benchmark.materialize_case(case)
+        self.assertTrue(materialized.get("_asset_missing"))
+        self.assertNotIn("messages", materialized)
+
+    def test_materialize_local_asset_image_reads_file_when_present(self):
+        with tempfile.TemporaryDirectory() as directory:
+            asset_path = Path(directory) / "cat.jpg"
+            asset_path.write_bytes(b"\xff\xd8\xff\xe0fake-jpeg-bytes")
+            case = {
+                "id": "real_vqa",
+                "generator": {
+                    "type": "local_asset_image",
+                    "default_path": str(asset_path),
+                    "question": "what is it?",
+                },
+            }
+            materialized = benchmark.materialize_case(case)
+        self.assertFalse(materialized.get("_asset_missing"))
+        content = materialized["messages"][1]["content"]
+        self.assertEqual(content[1]["type"], "image_url")
+
+    def test_materialize_local_asset_honors_path_env_override(self):
+        with tempfile.TemporaryDirectory() as directory:
+            asset_path = Path(directory) / "override.wav"
+            asset_path.write_bytes(b"RIFFfake-wav-bytes")
+            case = {
+                "id": "real_audio",
+                "generator": {
+                    "type": "local_asset_audio",
+                    "default_path": "assets/missing.wav",
+                    "path_env": "MY_AUDIO_PATH",
+                    "question": "transcribe",
+                },
+            }
+            materialized = benchmark.materialize_case(case, {"MY_AUDIO_PATH": str(asset_path)})
+        self.assertFalse(materialized.get("_asset_missing"))
+
+    def test_required_modalities_defaults_to_text(self):
+        self.assertEqual(benchmark.required_modalities({}), {"text"})
+        self.assertEqual(benchmark.required_modalities({"modalities": ["text", "image"]}), {"text", "image"})
+
+    def test_case_supported_by_capabilities(self):
+        case = {"modalities": ["text", "image"]}
+        self.assertTrue(benchmark.case_supported_by_capabilities(case, {"text", "image", "audio"}))
+        self.assertFalse(benchmark.case_supported_by_capabilities(case, {"text"}))
+
 
 class StreamingTests(unittest.TestCase):
     def test_stream_chat_combines_sse_text_usage_and_nested_timings(self):
@@ -170,6 +269,20 @@ class ResultTests(unittest.TestCase):
                 "ONE and TWO",
             ),
             1.0,
+        )
+        self.assertEqual(
+            benchmark.auto_score(
+                {"validator": {"type": "contains_any", "texts": ["one", "two"]}},
+                "only TWO here",
+            ),
+            1.0,
+        )
+        self.assertEqual(
+            benchmark.auto_score(
+                {"validator": {"type": "contains_any", "texts": ["one", "two"]}},
+                "neither here",
+            ),
+            0.0,
         )
         self.assertIsNone(benchmark.auto_score({"validator": {"type": "unknown"}}, "text"))
         self.assertIsNone(benchmark.auto_score({}, "text"))

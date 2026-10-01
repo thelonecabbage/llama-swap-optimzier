@@ -30,7 +30,15 @@ LOG_DIR = HERE / "benchmark-logs"
 
 SHORT_CASES = ("quick_chat", "it_troubleshooting", "coding_bug", "rag_grounding")
 LONG_CASES = ("long_context_8k", "long_context_24k")
-VL_CASES = SHORT_CASES
+MULTIMODAL_CASES = (
+    "synthetic_image_grid_vqa",
+    "synthetic_image_sequence_tracking",
+    "synthetic_audio_tone_count",
+    "real_image_vqa",
+    "real_document_qa",
+    "real_audio_transcribe",
+)
+VL_CASES = SHORT_CASES + MULTIMODAL_CASES
 
 
 class BenchmarkConfigError(ValueError):

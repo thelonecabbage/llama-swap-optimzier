@@ -104,4 +104,38 @@ For coding/IT work, manually review representative responses for:
 - code quality,
 - instruction following.
 
+## 9. Multimodal and task-coverage cases
+
+`benchmark_cases.json` also includes:
+
+- Text-only NLP task cases (`text_classification_sentiment`,
+  `zero_shot_topic_classification`, `extractive_qa`, `summarization_short`,
+  `translation_en_es`, `table_question_answering`) covering common
+  HuggingFace text-generation-style pipeline tags.
+- Synthetic multimodal cases (`synthetic_image_grid_vqa`,
+  `synthetic_image_sequence_tracking`, `synthetic_audio_tone_count`) that
+  exercise image/audio request plumbing and latency with deterministic,
+  dependency-free generated content (see `synthetic_media.py`). These have
+  reliable auto-validators since the expected answer is known exactly.
+- Real-asset cases (`real_image_vqa`, `real_document_qa`,
+  `real_audio_transcribe`) that use real photo/document/speech content for
+  more representative (if non-deterministic) vision/audio quality checks.
+  Run `python3 fetch_assets.py` once to download these (pinned, checksum
+  verified, CC-BY-NC-SA-4.0 licensed samples from
+  `huggingface/documentation-images`); the benchmark skips these cases with
+  a clear message if the assets aren't present. `real_document_qa` and
+  `real_audio_transcribe` have no automatic validator -- review responses
+  manually, since the exact expected text wasn't independently verified.
+
+`benchmark_llama_swap.py` only runs a case against a model if the model's
+detected capabilities cover the case's required modalities. Capabilities are
+resolved from `MODEL_CAPABILITIES_JSON`/`MODEL_DEFAULTS_JSON` (see
+`.env.example`), a local cache, or a live, content-agnostic probe against the
+endpoint (pass `--skip-capability-check` to force every case to run anyway).
+
+Out of scope: pipeline tags that an OpenAI-compatible chat/completions
+endpoint cannot serve (image/video/3D generation, object detection/
+segmentation, depth estimation, tabular, reinforcement learning, graph ML,
+text-to-speech output, etc.) are intentionally not covered here.
+
 Do not trade a meaningful quality regression for a small speed increase.

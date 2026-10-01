@@ -2,6 +2,8 @@
   {
     "id": "quick_chat",
     "description": "Short deterministic readiness response.",
+    "task": "text-generation",
+    "modalities": ["text"],
     "messages": [
       {
         "role": "system",
@@ -22,6 +24,8 @@
   {
     "id": "it_troubleshooting",
     "description": "Safe first-line Linux disk-space troubleshooting.",
+    "task": "text-generation",
+    "modalities": ["text"],
     "messages": [
       {
         "role": "system",
@@ -42,6 +46,8 @@
   {
     "id": "coding_bug",
     "description": "Diagnose and fix an off-by-one error while pairing adjacent items.",
+    "task": "text-generation",
+    "modalities": ["text"],
     "messages": [
       {
         "role": "system",
@@ -62,6 +68,8 @@
   {
     "id": "rag_grounding",
     "description": "Retrieve a unique value from a generated context and avoid guessing.",
+    "task": "text-retrieval",
+    "modalities": ["text"],
     "generator": {
       "type": "needle_haystack",
       "needle": "ORCHID-42",
@@ -79,6 +87,8 @@
   {
     "id": "long_context_8k",
     "description": "Retrieve a unique value from an approximately 8K-token generated context.",
+    "task": "text-retrieval",
+    "modalities": ["text"],
     "generator": {
       "type": "needle_haystack",
       "needle": "ORCHID-8K-731",
@@ -96,6 +106,8 @@
   {
     "id": "long_context_24k",
     "description": "Retrieve a unique value from an approximately 24K-token generated context.",
+    "task": "text-retrieval",
+    "modalities": ["text"],
     "generator": {
       "type": "needle_haystack",
       "needle": "ORCHID-24K-914",
@@ -109,5 +121,239 @@
       "type": "exact",
       "text": "ORCHID-24K-914"
     }
+  },
+  {
+    "id": "text_classification_sentiment",
+    "description": "Binary sentiment classification on a short review.",
+    "task": "text-classification",
+    "modalities": ["text"],
+    "messages": [
+      {
+        "role": "system",
+        "content": "Classify sentiment as exactly one word: positive or negative."
+      },
+      {
+        "role": "user",
+        "content": "Review: \"The battery life is terrible and it overheats within minutes.\" Sentiment (one word):"
+      }
+    ],
+    "temperature": 0.0,
+    "max_tokens": 8,
+    "validator": {
+      "type": "contains",
+      "text": "negative"
+    }
+  },
+  {
+    "id": "zero_shot_topic_classification",
+    "description": "Zero-shot classification of a sentence into one of several candidate labels.",
+    "task": "zero-shot-classification",
+    "modalities": ["text"],
+    "messages": [
+      {
+        "role": "system",
+        "content": "Pick exactly one label from the candidate list and reply with only that label."
+      },
+      {
+        "role": "user",
+        "content": "Candidate labels: sports, technology, politics, cooking.\nText: \"The new GPU doubles inference throughput while cutting power draw.\"\nLabel:"
+      }
+    ],
+    "temperature": 0.0,
+    "max_tokens": 8,
+    "validator": {
+      "type": "contains",
+      "text": "technology"
+    }
+  },
+  {
+    "id": "extractive_qa",
+    "description": "Answer a question using only a short provided passage.",
+    "task": "question-answering",
+    "modalities": ["text"],
+    "messages": [
+      {
+        "role": "system",
+        "content": "Answer using only the passage. Reply with the shortest exact answer."
+      },
+      {
+        "role": "user",
+        "content": "Passage: \"The Llama-Swap proxy was started in 2024 by a small group of self-hosters in Lisbon.\"\nQuestion: In what year was the Llama-Swap proxy started?\nAnswer:"
+      }
+    ],
+    "temperature": 0.0,
+    "max_tokens": 8,
+    "validator": {
+      "type": "contains",
+      "text": "2024"
+    }
+  },
+  {
+    "id": "summarization_short",
+    "description": "Summarize a short passage into one sentence containing its key fact.",
+    "task": "summarization",
+    "modalities": ["text"],
+    "messages": [
+      {
+        "role": "system",
+        "content": "Summarize in exactly one sentence."
+      },
+      {
+        "role": "user",
+        "content": "Passage: \"Researchers released a benchmark harness that measures time-to-first-token and tokens-per-second across multiple locally hosted language models, logging every run to a JSONL file for later comparison.\"\nOne-sentence summary:"
+      }
+    ],
+    "temperature": 0.0,
+    "max_tokens": 64,
+    "validator": {
+      "type": "contains_any",
+      "texts": ["benchmark", "jsonl", "tokens"]
+    }
+  },
+  {
+    "id": "translation_en_es",
+    "description": "Translate a short English sentence into Spanish.",
+    "task": "translation",
+    "modalities": ["text"],
+    "messages": [
+      {
+        "role": "system",
+        "content": "Translate the user's sentence into Spanish. Reply with only the translation."
+      },
+      {
+        "role": "user",
+        "content": "The server is running out of disk space."
+      }
+    ],
+    "temperature": 0.0,
+    "max_tokens": 32,
+    "validator": {
+      "type": "contains_any",
+      "texts": ["espacio", "disco"]
+    }
+  },
+  {
+    "id": "table_question_answering",
+    "description": "Answer a question about a small inline table.",
+    "task": "table-question-answering",
+    "modalities": ["text"],
+    "messages": [
+      {
+        "role": "system",
+        "content": "Answer using only the table. Reply with just the value."
+      },
+      {
+        "role": "user",
+        "content": "Table:\n| model | tokens_per_sec |\n| alpha | 12 |\n| beta  | 47 |\n| gamma | 31 |\n\nQuestion: Which model has the highest tokens_per_sec?\nAnswer:"
+      }
+    ],
+    "temperature": 0.0,
+    "max_tokens": 8,
+    "validator": {
+      "type": "contains",
+      "text": "beta"
+    }
+  },
+  {
+    "id": "synthetic_image_grid_vqa",
+    "description": "Identify the highlighted cell in a synthetic grid image (vision plumbing + latency).",
+    "task": "visual-question-answering",
+    "modalities": ["text", "image"],
+    "generator": {
+      "type": "synthetic_image_grid",
+      "grid_size": 4,
+      "cell_px": 24,
+      "highlight_row": 1,
+      "highlight_col": 2,
+      "question": "The image shows a 4x4 grid of cells, zero-indexed from the top-left as (row, col). Exactly one cell is a different color. Reply with only its row and column as 'row,col'."
+    },
+    "temperature": 0.0,
+    "max_tokens": 8,
+    "validator": {
+      "type": "contains",
+      "text": "1,2"
+    }
+  },
+  {
+    "id": "synthetic_image_sequence_tracking",
+    "description": "Track a moving highlighted cell across a sequence of synthetic frames (video-style plumbing).",
+    "task": "video-text-to-text",
+    "modalities": ["text", "image"],
+    "generator": {
+      "type": "synthetic_image_sequence",
+      "grid_size": 4,
+      "cell_px": 24,
+      "frame_positions": [[0, 0], [1, 1], [2, 2]],
+      "question": "Each frame shows a 4x4 grid, zero-indexed from the top-left as (row, col), with one highlighted cell. Reply with only the row and column of the highlighted cell in the final frame as 'row,col'."
+    },
+    "temperature": 0.0,
+    "max_tokens": 8,
+    "validator": {
+      "type": "contains",
+      "text": "2,2"
+    }
+  },
+  {
+    "id": "synthetic_audio_tone_count",
+    "description": "Count short tones in a synthetic audio clip (audio plumbing + latency).",
+    "task": "audio-classification",
+    "modalities": ["text", "audio"],
+    "generator": {
+      "type": "synthetic_audio_tones",
+      "tone_count": 3,
+      "question": "How many short beeps are in this audio clip? Reply with only the number."
+    },
+    "temperature": 0.0,
+    "max_tokens": 8,
+    "validator": {
+      "type": "contains",
+      "text": "3"
+    }
+  },
+  {
+    "id": "real_image_vqa",
+    "description": "Visual question answering on a real photo (requires running fetch_assets.py once).",
+    "task": "visual-question-answering",
+    "modalities": ["text", "image"],
+    "generator": {
+      "type": "local_asset_image",
+      "default_path": "assets/cat.jpg",
+      "path_env": "BENCHMARK_ASSET_CAT_IMAGE",
+      "question": "What animal is shown in this image? Reply with one word."
+    },
+    "temperature": 0.0,
+    "max_tokens": 8,
+    "validator": {
+      "type": "contains",
+      "text": "cat"
+    }
+  },
+  {
+    "id": "real_document_qa",
+    "description": "Document question answering on a real scanned document image (requires running fetch_assets.py once). No auto-validator: review responses manually.",
+    "task": "document-question-answering",
+    "modalities": ["text", "image"],
+    "generator": {
+      "type": "local_asset_image",
+      "default_path": "assets/docvqa_example.jpg",
+      "path_env": "BENCHMARK_ASSET_DOCVQA_IMAGE",
+      "question": "This image is a scanned document. Briefly describe what kind of document it is and any dates or names you can read."
+    },
+    "temperature": 0.0,
+    "max_tokens": 128
+  },
+  {
+    "id": "real_audio_transcribe",
+    "description": "Transcription/description of a real speech audio clip (requires running fetch_assets.py once). No auto-validator: review responses manually.",
+    "task": "automatic-speech-recognition",
+    "modalities": ["text", "audio"],
+    "generator": {
+      "type": "local_asset_audio",
+      "default_path": "assets/tts_example.wav",
+      "path_env": "BENCHMARK_ASSET_TTS_AUDIO",
+      "question": "Transcribe the speech in this audio clip as accurately as you can."
+    },
+    "temperature": 0.0,
+    "max_tokens": 64
   }
 ]
