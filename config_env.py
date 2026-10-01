@@ -9,6 +9,7 @@ from typing import Mapping
 
 
 ENV_PATH = Path(__file__).with_name(".env")
+DEFAULTS_PATH = Path(__file__).with_name(".defaults")
 ASSIGNMENT_RE = re.compile(r"^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 
 
@@ -44,7 +45,9 @@ def parse_env_file(path: Path) -> dict[str, str]:
 def load_environment(
     path: Path = ENV_PATH,
     process_environment: Mapping[str, str] | None = None,
+    defaults_path: Path = DEFAULTS_PATH,
 ) -> dict[str, str]:
-    environment = parse_env_file(path)
+    environment = parse_env_file(defaults_path)
+    environment.update(parse_env_file(path))
     environment.update(process_environment if process_environment is not None else os.environ)
     return environment

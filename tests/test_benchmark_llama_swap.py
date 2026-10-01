@@ -229,6 +229,12 @@ class MainTests(unittest.TestCase):
         self.assertEqual(args.api_key, "configured-key")
         self.assertEqual(args.runs, 4)
 
+    def test_parser_uses_models_alias_when_set(self):
+        parser = benchmark.make_parser({"MODELS": "model-a,model-b"})
+        args = parser.parse_args([])
+
+        self.assertEqual(args.models, ["model-a", "model-b"])
+
     def test_main_writes_warmup_and_measured_rows_without_live_http(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

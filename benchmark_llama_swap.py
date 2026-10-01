@@ -40,6 +40,7 @@ import csv
 import hashlib
 import json
 import platform
+import re
 import statistics
 import sys
 import time
@@ -441,11 +442,23 @@ def build_summary(results_path: Path, summary_path: Path) -> None:
             })
 
 
+def split_model_names(raw: Optional[str]) -> List[str]:
+    if not raw:
+        return []
+    return [part for part in re.split(r"[\s,]+", raw.strip()) if part]
+
+
 def make_parser(environment: Dict[str, str]) -> argparse.ArgumentParser:
+    default_models = split_model_names(
+        environment.get("MODELS")
+        or environment.get("BENCHMARK_MODELS")
+        or environment.get("MODEL", "")
+    )
     p = argparse.ArgumentParser(description="Benchmark llama-swap / llama.cpp via OpenAI chat completions.")
     p.add_argument("--base-url", default=environment.get("LLAMA_SWAP_BASE_URL"))
     p.add_argument("--api-key", default=environment.get("LLAMA_SWAP_API_KEY"))
     p.add_argument("--model", action="append", help="Model ID. Repeat for multiple models.")
+    p.add_argument("--models", nargs="+", default=default_models, help="Model IDs. Accepts multiple values or comma-separated values.")
     p.add_argument("--case", action="append", dest="case_names", help="Case ID. Repeat to select cases.")
     p.add_argument("--cases-file", type=Path, default=Path(environment.get("BENCHMARK_CASES_FILE", DEFAULT_CASES)))
     p.add_argument("--results", type=Path, default=Path(environment.get("BENCHMARK_RESULTS_FILE", DEFAULT_RESULTS)))
@@ -472,11 +485,16 @@ def main() -> int:
 
     if not args.base_url:
         p.error("--base-url or LLAMA_SWAP_BASE_URL is required")
+    if not args.model and args.models:
+        args.model = split_model_names(" ".join(args.models))
     if not args.model:
-        configured_models = environment.get("BENCHMARK_MODELS", environment.get("MODEL", ""))
-        args.model = configured_models.replace(",", " ").split()
+        configured_models = environment.get(
+            "MODELS",
+            environment.get("BENCHMARK_MODELS", environment.get("MODEL", "")),
+        )
+        args.model = split_model_names(configured_models)
     if not args.model:
-        p.error("--model, BENCHMARK_MODELS, or MODEL is required")
+        p.error("--model, --models, MODELS, BENCHMARK_MODELS, or MODEL is required")
 
     if args.runs < 1 or args.warmups < 0:
         p.error("--runs must be >=1 and --warmups must be >=0")

@@ -8,6 +8,8 @@
 - `benchmark_cases.json` — stable benchmark workload definitions.
 - `benchmark_results.jsonl` — append-only raw benchmark log.
 - `benchmark_summary.csv` — generated median summary.
+- `.defaults` — checked-in generic tuning defaults, shared by every environment.
+- `.env` — local, ignored environment config: endpoints, credentials, model selection/paths.
 - `BENCHMARKING.md` — operating procedure.
 
 ## Workspace Quick Start
@@ -24,6 +26,8 @@ From the repository root, verify the checkout and preview the sample run:
 ```bash
 cp .env.example .env
 # Edit .env for the local endpoint, credentials, models, and paths.
+# Generic tuning defaults (run counts, timeouts, llama-server flags) live in
+# the checked-in .defaults file; override them in .env only when needed.
 python3 -m unittest discover -v
 python3 run_benchmark_tests.py --dry-run examples/swap-smoke.conf
 ```

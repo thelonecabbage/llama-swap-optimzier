@@ -38,6 +38,34 @@ class EnvConfigTests(unittest.TestCase):
             self.assertEqual(environment["SERVER_URL"], "http://exported")
             self.assertEqual(environment["ONLY_FILE"], "yes")
 
+    def test_defaults_file_is_overridden_by_dotenv_and_then_process_environment(self):
+        with tempfile.TemporaryDirectory() as directory:
+            defaults_path = Path(directory) / ".defaults"
+            env_path = Path(directory) / ".env"
+            defaults_path.write_text(
+                "TIMEOUT=900\nSHORT_RUNS=3\nONLY_DEFAULT=base\n", encoding="utf-8"
+            )
+            env_path.write_text("SHORT_RUNS=5\n", encoding="utf-8")
+
+            environment = load_environment(
+                env_path, {"TIMEOUT": "60"}, defaults_path=defaults_path
+            )
+
+            self.assertEqual(environment["ONLY_DEFAULT"], "base")
+            self.assertEqual(environment["SHORT_RUNS"], "5")
+            self.assertEqual(environment["TIMEOUT"], "60")
+
+    def test_missing_defaults_file_is_not_an_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            env_path = Path(directory) / ".env"
+            env_path.write_text("ONLY_FILE=yes\n", encoding="utf-8")
+
+            environment = load_environment(
+                env_path, {}, defaults_path=Path(directory) / "missing.defaults"
+            )
+
+            self.assertEqual(environment["ONLY_FILE"], "yes")
+
 
 if __name__ == "__main__":
     unittest.main()

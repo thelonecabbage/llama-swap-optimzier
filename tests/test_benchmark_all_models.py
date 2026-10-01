@@ -138,6 +138,13 @@ class SuitePlanningTests(unittest.TestCase):
         self.assertEqual(suites[0].runs, 5)
         self.assertEqual(suites[0].cases, ("quick_chat", "rag_grounding"))
 
+    def test_models_alias_is_the_unified_selection_list(self):
+        suites = plan_suites({"MODELS": "text-a,text-b", "CORE_MODELS": "legacy-core"})
+
+        self.assertEqual(len(suites), 4)
+        self.assertEqual([suite.model for suite in suites], ["text-a", "text-a", "text-b", "text-b"])
+        self.assertEqual([suite.name for suite in suites[:2]], ["short-core", "long-context"])
+
     def test_benchmark_command_preserves_repeated_case_arguments_and_direct_flags(self):
         suite = plan_suites({"MODEL": "text-model"})[0]
         command = build_benchmark_command(

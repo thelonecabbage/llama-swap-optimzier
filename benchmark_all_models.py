@@ -71,7 +71,26 @@ def validate_bool(name: str, value: str) -> None:
 
 
 def configured_models(env: Mapping[str, str], name: str) -> tuple[str, ...]:
-    return tuple(env.get(name, "").replace(",", " ").split())
+    raw = env.get(name, "")
+    if not raw:
+        return ()
+    return tuple(part for part in re.split(r"[\s,]+", raw.strip()) if part)
+
+
+def selected_model_names(env: Mapping[str, str]) -> tuple[str, ...]:
+    explicit = configured_models(env, "MODELS")
+    if explicit:
+        return explicit
+
+    explicit_model = configured_models(env, "MODEL")
+    if explicit_model:
+        return explicit_model
+
+    models = configured_models(env, "CORE_MODELS") + configured_models(env, "VL_MODELS")
+    if models:
+        return models
+
+    return configured_models(env, "BENCHMARK_MODELS")
 
 
 def model_defaults(env: Mapping[str, str]) -> dict[str, dict[str, str]]:
@@ -288,12 +307,27 @@ def plan_suites(env: Mapping[str, str]) -> list[Suite]:
     custom_cases_value = env.get("BENCH_CASES", "")
     core_models = configured_models(env, "CORE_MODELS")
     vl_models = configured_models(env, "VL_MODELS")
+    unified_models = configured_models(env, "MODELS")
+
+    if unified_models:
+        if custom_cases_value:
+            cases = tuple(custom_cases_value.replace(",", " ").split())
+            return [Suite(model, short_runs, "custom", cases) for model in unified_models]
+        suites = [
+            suite
+            for model in unified_models
+            for suite in (
+                Suite(model, short_runs, "short-core", SHORT_CASES),
+                Suite(model, long_runs, "long-context", LONG_CASES),
+            )
+        ]
+        return suites
 
     if custom_cases_value:
         cases = tuple(custom_cases_value.replace(",", " ").split())
         models = (selected_model,) if selected_model else core_models + vl_models
         if not models:
-            raise BenchmarkConfigError("Set MODEL, CORE_MODELS, or VL_MODELS")
+            raise BenchmarkConfigError("Set MODEL, MODELS, CORE_MODELS, VL_MODELS, or BENCHMARK_MODELS")
         return [Suite(model, short_runs, "custom", cases) for model in models]
 
     if selected_model:
@@ -314,7 +348,7 @@ def plan_suites(env: Mapping[str, str]) -> list[Suite]:
     ]
     suites.extend(Suite(model, short_runs, "vl-text-subset", VL_CASES) for model in vl_models)
     if not suites:
-        raise BenchmarkConfigError("Set MODEL, CORE_MODELS, or VL_MODELS")
+        raise BenchmarkConfigError("Set MODEL, MODELS, CORE_MODELS, VL_MODELS, or BENCHMARK_MODELS")
     return suites
 
 

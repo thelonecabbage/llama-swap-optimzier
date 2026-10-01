@@ -1,0 +1,63 @@
+# Checked-in default values shared by every environment.
+# Override any of these from .env or the process environment; .env and
+# process/CLI values always win over this file.
+
+# Benchmark defaults
+# Path to the JSON file defining benchmark prompts/cases.
+BENCHMARK_CASES_FILE=benchmark_cases.json
+# Append-only JSONL file that raw per-run results are written to.
+BENCHMARK_RESULTS_FILE=benchmark_results.jsonl
+# CSV file that holds the generated median summary per model/case.
+BENCHMARK_SUMMARY_FILE=benchmark_summary.csv
+# Measured runs per model/case, excluding warmups.
+BENCHMARK_RUNS=3
+# Warmup runs per model/case; logged but excluded from summary medians.
+BENCHMARK_WARMUPS=1
+# Seconds to wait for a single chat completion request before timing out.
+BENCHMARK_TIMEOUT=900
+# Sampling temperature sent with each benchmark request.
+BENCHMARK_TEMPERATURE=0.0
+# Short label stored in each result row identifying the server configuration under test.
+BENCHMARK_CONFIG_ID=baseline
+# Free-form note stored alongside each result row.
+BENCHMARK_NOTES=
+# Path to the benchmark script invoked by run_benchmark_tests.py for each test-plan block.
+BENCHMARK_SCRIPT=./benchmark_all_models.py
+# Directory run_benchmark_tests.py writes its wrapper summary logs to.
+BENCHMARK_WRAPPER_LOG_DIR=./benchmark-wrapper-logs
+
+# Sweep defaults
+# Measured runs per model for the short-core/custom suites in a sweep.
+SHORT_RUNS=3
+# Measured runs per model for the long-context suite in a sweep.
+LONG_RUNS=2
+# Warmup runs per model/case during a sweep.
+WARMUPS=1
+# Seconds to wait for a single sweep suite invocation before timing out.
+TIMEOUT=1800
+# 1 benchmarks a local llama-server via Docker; 0 benchmarks the llama-swap endpoint.
+DIRECT_MODE=0
+
+# DIRECT mode behavior defaults
+# Restart the DIRECT_CONTAINER before each run to clear resident model state.
+DIRECT_RESTART_CONTAINER=1
+# Seconds to wait for llama-server to answer /v1/models before declaring startup failed.
+DIRECT_START_TIMEOUT=300
+
+# DIRECT mode llama-server defaults. Per-model JSON values override these.
+# Context window size, in tokens, passed as --ctx-size.
+CTX_SIZE=32768
+# Number of parallel request slots, passed as --parallel.
+PARALLEL=1
+# Generation thread count, passed as --threads.
+THREADS=6
+# Prompt-processing thread count, passed as --threads-batch.
+THREADS_BATCH=6
+# Number of model layers offloaded to GPU, passed as --n-gpu-layers.
+GPU_LAYERS=0
+# Logical batch size, passed as --batch-size.
+BATCH_SIZE=256
+# Physical micro-batch size, passed as --ubatch-size.
+UBATCH_SIZE=64
+# Enable Jinja chat-template rendering, passed as --jinja.
+JINJA=1
